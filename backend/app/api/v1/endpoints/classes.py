@@ -31,7 +31,7 @@ async def list_classes(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> Page[ClassOut]:
-    items, total = await ClassService(db).list(user, offset=offset, limit=limit)
+    items, total = await ClassService(db).list_classes(user, offset=offset, limit=limit)
     return Page(
         items=[ClassOut.model_validate(c) for c in items],
         total=total,

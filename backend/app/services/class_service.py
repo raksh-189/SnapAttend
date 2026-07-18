@@ -56,7 +56,7 @@ class ClassService:
             raise PermissionDeniedError("You do not own this class")
         return classroom
 
-    async def list(
+    async def list_classes(
         self, actor: User, *, offset: int, limit: int
     ) -> tuple[list[Classroom], int]:
         teacher_id = None if actor.role == UserRole.ADMIN else actor.id
