@@ -1,7 +1,8 @@
-"""Declarative base and model registry.
+"""Declarative base and shared column mixins.
 
-Alembic autogenerate discovers tables through this module: importing
-`app.db.base` imports every model exactly once.
+The full model registry lives in `app.models` (its __init__ imports every
+model exactly once) — import that, not this module, when you need
+Base.metadata to be complete (e.g. Alembic autogenerate).
 """
 
 import uuid
@@ -35,17 +36,3 @@ class UpdatedAtMixin:
         onupdate=func.now(),
         nullable=False,
     )
-
-
-# Import all models so Base.metadata is complete (used by Alembic).
-from app.models.audit import AuditLog  # noqa: E402,F401
-from app.models.attendance import (  # noqa: E402,F401
-    AttendanceRecord,
-    AttendanceSession,
-    FaceDetection,
-    SessionImage,
-)
-from app.models.classroom import Classroom, Enrollment  # noqa: E402,F401
-from app.models.face import FaceEmbedding, StudentFaceImage  # noqa: E402,F401
-from app.models.student import Student  # noqa: E402,F401
-from app.models.user import RefreshToken, User  # noqa: E402,F401

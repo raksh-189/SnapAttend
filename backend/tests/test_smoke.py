@@ -24,6 +24,7 @@ async def test_unknown_route_returns_404(app):
 
 
 def test_all_models_are_registered():
+    import app.models  # noqa: F401  — registers every table on Base.metadata
     from app.db.base import Base
 
     tables = set(Base.metadata.tables)

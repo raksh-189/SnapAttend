@@ -3,7 +3,7 @@
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Float, ForeignKey, String, Text
+from sqlalchemy import Float, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,15 @@ class StudentFaceImage(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
 class FaceEmbedding(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "face_embeddings"
+    __table_args__ = (
+        # ANN cosine search over enrollment embeddings (L2-normalized).
+        Index(
+            "ix_face_embeddings_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     student_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
