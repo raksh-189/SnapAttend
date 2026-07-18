@@ -58,7 +58,9 @@ def create_app() -> FastAPI:
         return {"status": "ok", "app": settings.APP_NAME}
 
     # API v1 routers are mounted here as modules land (Module 2+):
-    # app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
+    from app.api.v1.router import api_v1_router
+
+    app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
 
     return app
 

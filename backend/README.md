@@ -20,10 +20,20 @@ cp .env.example .env                      # then set a real SECRET_KEY
 # 4. Migrate + run
 .venv/Scripts/alembic upgrade head
 .venv/Scripts/uvicorn app.main:app --reload --port 8000
+
+# 5. Create the first admin (idempotent)
+.venv/Scripts/python -m app.cli.create_admin --email admin@example.com --full-name "Admin"
 ```
 
 Verify: `curl http://localhost:8000/health` → `{"status":"ok","app":"AttendAI"}`.
 Interactive docs (non-production only): http://localhost:8000/docs
+
+## Auth
+
+- `POST /api/v1/auth/login` `{email, password}` → `{access_token, refresh_token}`
+- `POST /api/v1/auth/refresh` `{refresh_token}` → new pair (rotation; reuse of an old token revokes the whole family)
+- `POST /api/v1/auth/logout` `{refresh_token, everywhere?}` (Bearer required)
+- `GET /api/v1/auth/me` (Bearer required)
 
 ## Full stack via Docker
 
