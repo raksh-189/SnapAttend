@@ -2,7 +2,9 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth
+from app.api.v1.endpoints import auth, classes, students
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router)
+api_v1_router.include_router(classes.router)
+api_v1_router.include_router(students.router)
