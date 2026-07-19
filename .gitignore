@@ -16,6 +16,7 @@ venv/
 backend/media/
 backend/models/
 *.log
+*.whl
 
 # Node (frontend, later modules)
 node_modules/

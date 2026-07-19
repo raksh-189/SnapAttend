@@ -22,7 +22,13 @@ async def lifespan(app: FastAPI):
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
     logger.info("database_connected")
-    # Module 4 will load the InsightFace model here (once, before serving).
+    # Warm the face engine once, off the event loop, before serving —
+    # requests never pay the multi-second ONNX model load.
+    import asyncio
+
+    from app.services.face.engine import get_face_engine
+
+    await asyncio.to_thread(get_face_engine)
     yield
     await engine.dispose()
     logger.info("shutdown")

@@ -4,6 +4,12 @@ FROM python:3.11-slim AS builder
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /build
 
+# insightface ships as an sdist with a Cython extension — needs a compiler.
+# Build tools live only in this stage; the runtime image stays slim.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -33,7 +39,9 @@ RUN mkdir -p /srv/app/media /srv/app/models && chown -R appuser:appuser /srv/app
 USER appuser
 
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+# start-period covers the lifespan face-engine warm-up (first boot may
+# download buffalo_l into the models volume — allow a couple of minutes).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
 # Railway/Render inject PORT; default 8000 for local/compose.

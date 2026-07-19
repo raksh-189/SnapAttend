@@ -8,6 +8,8 @@ Requires the compose `db` service to be running (docker compose up -d db).
 Tests are skipped automatically if the database is unreachable.
 """
 
+import os
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -18,8 +20,11 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_db
 
-ADMIN_URL = "postgresql+asyncpg://attendai:attendai_dev@localhost:5432/attendai"
-TEST_URL = "postgresql+asyncpg://attendai:attendai_dev@localhost:5432/attendai_test"
+# Override when the compose db service maps a non-default host port
+# (DB_PORT in docker-compose.yml), e.g. TEST_DB_PORT=55432.
+_DB_PORT = os.environ.get("TEST_DB_PORT", "5432")
+ADMIN_URL = f"postgresql+asyncpg://attendai:attendai_dev@localhost:{_DB_PORT}/attendai"
+TEST_URL = f"postgresql+asyncpg://attendai:attendai_dev@localhost:{_DB_PORT}/attendai_test"
 
 
 @pytest.fixture(scope="session")

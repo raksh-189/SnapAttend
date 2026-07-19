@@ -18,6 +18,11 @@ dependencies = [
     "python-multipart>=0.0.9",
     "structlog>=24.1,<25.0",
     "greenlet>=3.0",
+    # Face pipeline (CPU-only)
+    "insightface>=0.7.3,<0.8",
+    "onnxruntime>=1.17,<2.0",
+    "opencv-python-headless>=4.9,<5.0",
+    "numpy>=1.26,<2.0",
 ]
 
 [project.optional-dependencies]

@@ -14,6 +14,16 @@ EMBEDDING_DIM = 512  # ArcFace output dimension
 
 class StudentFaceImage(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "student_face_images"
+    __table_args__ = (
+        # One row per distinct photo per student — duplicate uploads are
+        # detected by SHA-256 of the raw bytes.
+        Index(
+            "uq_student_face_images_student_hash",
+            "student_id",
+            "content_hash",
+            unique=True,
+        ),
+    )
 
     student_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -22,6 +32,7 @@ class StudentFaceImage(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
     )
     image_path: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
