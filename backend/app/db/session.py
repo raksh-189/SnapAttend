@@ -28,6 +28,12 @@ async_session_factory = async_sessionmaker(
 )
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """FastAPI dependency for code that opens its OWN sessions after the
+    request ends (background pipeline). Overridable in tests."""
+    return async_session_factory
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency: one session per request.
 
