@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.api.deps import CurrentUser, DbSession
 from app.db.session import get_session_factory
 from app.schemas.attendance import (
+    RecordOverrideIn,
+    ResolveDetectionIn,
     SessionCreateOut,
     SessionDetailOut,
     SessionSummaryOut,
@@ -113,3 +115,49 @@ async def get_detection_crop(
         session_id, detection_id, user, storage=storage
     )
     return Response(content=data, media_type="image/jpeg")
+
+
+# --- Verification ------------------------------------------------------------
+
+
+@router.patch(
+    "/sessions/{session_id}/records/{student_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def override_record(
+    session_id: uuid.UUID,
+    student_id: uuid.UUID,
+    body: RecordOverrideIn,
+    user: CurrentUser,
+    db: DbSession,
+) -> None:
+    """Override one student's draft verdict (absent → present, mark late, …).
+    Only while the session is pending_review."""
+    await AttendanceService(db).override_record(session_id, student_id, body.status, user)
+
+
+@router.post(
+    "/sessions/{session_id}/detections/{detection_id}/resolve",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def resolve_detection(
+    session_id: uuid.UUID,
+    detection_id: uuid.UUID,
+    body: ResolveDetectionIn,
+    user: CurrentUser,
+    db: DbSession,
+) -> None:
+    """Assign an unknown face to a student (optionally marking them present),
+    or clear an assignment with student_id=null."""
+    await AttendanceService(db).resolve_detection(
+        session_id, detection_id, body.student_id, user, mark_present=body.mark_present
+    )
+
+
+@router.post("/sessions/{session_id}/confirm", response_model=SessionSummaryOut)
+async def confirm_session(
+    session_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> SessionSummaryOut:
+    """Finalize the register: pending_review → confirmed (terminal, audited)."""
+    session = await AttendanceService(db).confirm_session(session_id, user)
+    return SessionSummaryOut.model_validate(session)

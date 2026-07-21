@@ -6,14 +6,15 @@ a BackgroundTask after `create_session` returns (see services/face/pipeline).
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError, ValidationFailedError
+from app.core.exceptions import InvalidStateError, NotFoundError, ValidationFailedError
 from app.core.logging import get_logger
-from app.models.attendance import AttendanceSession, SessionImage
-from app.models.enums import SessionStatus
+from app.models.attendance import AttendanceRecord, AttendanceSession, SessionImage
+from app.models.audit import AuditLog
+from app.models.enums import AttendanceStatus, MatchStatus, RecordSource, SessionStatus
 from app.models.user import User
 from app.repositories.attendance_repo import AttendanceRepository
 from app.repositories.student_repo import StudentRepository
@@ -156,3 +157,120 @@ class AttendanceService:
             return storage.get(detection.crop_path)
         except FileNotFoundError:
             raise NotFoundError("Crop image not found") from None
+
+    # --- Verification (evidence → confirmed verdict) -------------------------
+
+    @staticmethod
+    def _require_reviewable(session: AttendanceSession) -> None:
+        """Edits are only legal while the teacher is reviewing."""
+        if session.status is not SessionStatus.PENDING_REVIEW:
+            raise InvalidStateError(
+                f"Session is {session.status.value}; edits require pending_review"
+            )
+
+    async def override_record(
+        self,
+        session_id: uuid.UUID,
+        student_id: uuid.UUID,
+        new_status: AttendanceStatus,
+        actor: User,
+    ) -> AttendanceRecord:
+        """Teacher overrides one student's draft verdict (source → manual)."""
+        session = await self.get_session_owned(session_id, actor)
+        self._require_reviewable(session)
+        record = await self.sessions.get_record(session_id, student_id)
+        if record is None:
+            raise NotFoundError("No attendance record for this student in this session")
+
+        record.status = new_status
+        record.source = RecordSource.MANUAL
+        record.marked_by = actor.id
+        self.session.add(
+            AuditLog(
+                user_id=actor.id,
+                action="record.override",
+                entity_type="attendance_record",
+                entity_id=record.id,
+                payload={"student_id": str(student_id), "status": new_status.value},
+            )
+        )
+        await self.session.commit()
+        await self.session.refresh(record)
+        return record
+
+    async def resolve_detection(
+        self,
+        session_id: uuid.UUID,
+        detection_id: uuid.UUID,
+        student_id: uuid.UUID | None,
+        actor: User,
+        *,
+        mark_present: bool = True,
+    ) -> None:
+        """Assign an unknown/low-quality face to a roster student (or clear a
+        previous assignment with student_id=None). Optionally flips the
+        student's record to present(manual)."""
+        session = await self.get_session_owned(session_id, actor)
+        self._require_reviewable(session)
+        detection = await self.sessions.get_detection(detection_id)
+        if detection is None or detection.session_image.session_id != session.id:
+            raise NotFoundError("Detection not found")
+        if detection.match_status not in (MatchStatus.UNKNOWN, MatchStatus.LOW_QUALITY):
+            raise InvalidStateError("Only unknown or low-quality faces can be resolved")
+
+        if student_id is not None:
+            record = await self.sessions.get_record(session_id, student_id)
+            if record is None:  # not on this class's roster
+                raise NotFoundError("Student has no record in this session")
+            if mark_present:
+                record.status = AttendanceStatus.PRESENT
+                record.source = RecordSource.MANUAL
+                record.marked_by = actor.id
+                record.detection_id = detection.id
+                record.confidence = None  # human call, not an AI score
+
+        detection.resolved_student_id = student_id
+        detection.resolved_by = actor.id if student_id is not None else None
+        self.session.add(
+            AuditLog(
+                user_id=actor.id,
+                action="detection.resolve",
+                entity_type="face_detection",
+                entity_id=detection.id,
+                payload={
+                    "student_id": str(student_id) if student_id else None,
+                    "mark_present": mark_present,
+                },
+            )
+        )
+        await self.session.commit()
+
+    async def confirm_session(self, session_id: uuid.UUID, actor: User) -> AttendanceSession:
+        """pending_review → confirmed. Terminal: records become the official
+        register and feed analytics/reports."""
+        session = await self.get_session_owned(session_id, actor)
+        self._require_reviewable(session)
+
+        session.status = SessionStatus.CONFIRMED
+        session.confirmed_at = datetime.now(timezone.utc)
+        present = sum(
+            1 for r in session.records if r.status is AttendanceStatus.PRESENT
+        )
+        self.session.add(
+            AuditLog(
+                user_id=actor.id,
+                action="session.confirm",
+                entity_type="attendance_session",
+                entity_id=session.id,
+                payload={"present": present, "total": len(session.records)},
+            )
+        )
+        await self.session.commit()
+        await self.session.refresh(session)
+        logger.info(
+            "session_confirmed",
+            session_id=str(session.id),
+            present=present,
+            total=len(session.records),
+        )
+        return session
